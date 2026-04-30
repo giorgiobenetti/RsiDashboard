@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>RSI Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #080B10;
+    --bg2: #0D1117;
+    --bg3: #141A24;
+    --border: #1E2A3A;
+    --text: #E8EDF5;
+    --muted: #4A5568;
+    --accent: #00D4FF;
+    --green: #00E676;
+    --red: #FF3D6B;
+    --yellow: #FFD600;
+    --ob: #FF3D6B;
+    --os: #00E676;
+    --neutral: #4A5568;
+    --font-mono: 'Space Mono', monospace;
+    --font-ui: 'Syne', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-ui);
+    min-height: 100vh;
+    overscroll-behavior: none;
+  }
+
+  /* HEADER */
+  .header {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: rgba(8,11,16,0.95);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .header-title {
+    font-size: 18px;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+    color: var(--accent);
+  }
+
+  .header-sub {
+    font-size: 10px;
+    color: var(--muted);
+    font-family: var(--font-mono);
+    margin-top: 1px;
+  }
+
+  .refresh-btn {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--accent);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    padding: 6px 12px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.2s;
+  }
+  .refresh-btn:active { transform: scale(0.95); background: var(--border); }
+  .refresh-btn.loading { opacity: 0.5; pointer-events: none; }
+  .refresh-btn .spin { display: inline-block; }
+  .refresh-btn.loading .spin { animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* LAST UPDATE */
+  .update-bar {
+    background: var(--bg2);
+    padding: 6px 16px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--muted);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--border);
+  }
+
+  /* LEGENDA */
+  .legend {
+    display: flex;
+    gap: 12px;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .legend::-webkit-scrollbar { display: none; }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 10px;
+    color: var(--muted);
+    white-space: nowrap;
+    font-family: var(--font-mono);
+  }
+  .legend-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  /* GRID COPPIE */
+  .grid {
+    padding: 12px 16px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+
+  .card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 12px;
+    position: relative;
+    overflow: hidden;
+    transition: transform 0.15s;
+    cursor: pointer;
+  }
+  .card:active { transform: scale(0.97); }
+
+  .card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+    border-radius: 12px 12px 0 0;
+  }
+  .card.overbought::before { background: var(--ob); }
+  .card.oversold::before { background: var(--os); }
+  .card.neutral::before { background: var(--neutral); }
+  .card.loading-card::before { background: var(--border); }
+
+  .card-pair {
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    color: var(--text);
+    font-family: var(--font-mono);
+  }
+
+  .card-rsi {
+    font-size: 32px;
+    font-weight: 800;
+    font-family: var(--font-mono);
+    line-height: 1;
+    margin: 6px 0 4px;
+  }
+  .card.overbought .card-rsi { color: var(--ob); }
+  .card.oversold .card-rsi { color: var(--os); }
+  .card.neutral .card-rsi { color: var(--text); }
+  .card.loading-card .card-rsi { color: var(--muted); }
+
+  .card-label {
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    font-family: var(--font-mono);
+  }
+  .card.overbought .card-label { color: var(--ob); }
+  .card.oversold .card-label { color: var(--os); }
+  .card.neutral .card-label { color: var(--muted); }
+  .card.loading-card .card-label { color: var(--muted); }
+
+  /* BARRA RSI */
+  .rsi-bar-wrap {
+    margin-top: 10px;
+    height: 4px;
+    background: var(--bg3);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .rsi-bar {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.6s ease;
+  }
+  .card.overbought .rsi-bar { background: var(--ob); }
+  .card.oversold .rsi-bar { background: var(--os); }
+  .card.neutral .rsi-bar { background: var(--accent); }
+
+  /* ZONE MARKERS sulla barra */
+  .rsi-bar-container {
+    position: relative;
+    margin-top: 10px;
+  }
+  .rsi-bar-wrap { margin-top: 0; }
+  .rsi-markers {
+    position: relative;
+    height: 4px;
+    background: var(--bg3);
+    border-radius: 2px;
+    overflow: visible;
+  }
+  .rsi-fill {
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    border-radius: 2px;
+    transition: width 0.6s ease;
+  }
+  .rsi-line {
+    position: absolute;
+    top: -3px;
+    width: 1px;
+    height: 10px;
+    background: rgba(255,255,255,0.15);
+  }
+
+  /* DETAIL MODAL */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.7);
+    z-index: 200;
+    backdrop-filter: blur(4px);
+  }
+  .modal-overlay.open { display: flex; align-items: flex-end; }
+
+  .modal {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 20px 20px 0 0;
+    padding: 20px 20px 40px;
+    width: 100%;
+    max-height: 85vh;
+    overflow-y: auto;
+    animation: slideUp 0.3s ease;
+  }
+  @keyframes slideUp {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
+  }
+
+  .modal-handle {
+    width: 40px; height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    margin: 0 auto 20px;
+  }
+
+  .modal-pair {
+    font-size: 28px;
+    font-weight: 800;
+    font-family: var(--font-mono);
+    color: var(--accent);
+    margin-bottom: 4px;
+  }
+
+  .modal-rsi-big {
+    font-size: 64px;
+    font-weight: 800;
+    font-family: var(--font-mono);
+    line-height: 1;
+    margin: 12px 0 4px;
+  }
+
+  .modal-signal {
+    font-size: 11px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    font-family: var(--font-mono);
+    font-weight: 700;
+    margin-bottom: 24px;
+  }
+
+  .modal-section-title {
+    font-size: 10px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-family: var(--font-mono);
+    margin-bottom: 12px;
+  }
+
+  .modal-candles {
+    display: flex;
+    gap: 4px;
+    align-items: flex-end;
+    height: 80px;
+    margin-bottom: 20px;
+    padding: 0 4px;
+  }
+
+  .candle-wrap {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    height: 100%;
+    justify-content: flex-end;
+  }
+
+  .candle-bar {
+    width: 100%;
+    min-height: 3px;
+    border-radius: 2px;
+    transition: height 0.4s ease;
+  }
+
+  .candle-rsi-label {
+    font-size: 7px;
+    font-family: var(--font-mono);
+    color: var(--muted);
+    margin-top: 3px;
+  }
+
+  .close-modal {
+    width: 100%;
+    margin-top: 20px;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--muted);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    padding: 12px;
+    cursor: pointer;
+    letter-spacing: 1px;
+  }
+
+  /* GESTIONE COPPIE */
+  .manage-bar {
+    padding: 10px 16px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .manage-input {
+    flex: 1;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    padding: 8px 12px;
+    text-transform: uppercase;
+    outline: none;
+  }
+  .manage-input::placeholder { color: var(--muted); text-transform: none; }
+  .manage-input:focus { border-color: var(--accent); }
+
+  .add-btn {
+    background: var(--accent);
+    border: none;
+    border-radius: 8px;
+    color: var(--bg);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 700;
+    padding: 8px 16px;
+    cursor: pointer;
+  }
+  .add-btn:active { opacity: 0.8; }
+
+  /* ERROR */
+  .error-msg {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--red);
+    padding: 6px 16px;
+    display: none;
+  }
+
+  /* SCROLLBAR */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  /* SKELETON */
+  @keyframes shimmer {
+    0% { opacity: 0.4; }
+    50% { opacity: 0.8; }
+    100% { opacity: 0.4; }
+  }
+  .skeleton { animation: shimmer 1.2s infinite; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <div class="header-title">RSI WATCH</div>
+    <div class="header-sub">H4 · PERIODI 14 · CONTRARIAN</div>
+  </div>
+  <button class="refresh-btn" id="refreshBtn" onclick="refreshAll()">
+    <span class="spin">↻</span> AGGIORNA
+  </button>
+</div>
+
+<div class="update-bar">
+  <span id="lastUpdate">— non aggiornato</span>
+  <span id="pairCount">0 coppie</span>
+</div>
+
+<div class="legend">
+  <div class="legend-item"><div class="legend-dot" style="background:var(--ob)"></div> OB &gt;70 SHORT</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--os)"></div> OS &lt;30 LONG</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--accent)"></div> NEUTRO</div>
+</div>
+
+<div class="grid" id="grid"></div>
+
+<div class="manage-bar">
+  <input class="manage-input" id="pairInput" placeholder="es. EURGBP" maxlength="10" />
+  <button class="add-btn" onclick="addPair()">+ ADD</button>
+</div>
+<div class="error-msg" id="errorMsg"></div>
+
+<!-- MODAL DETTAGLIO -->
+<div class="modal-overlay" id="modalOverlay" onclick="closeModal(event)">
+  <div class="modal" id="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-pair" id="modalPair">—</div>
+    <div class="modal-rsi-big" id="modalRsi">—</div>
+    <div class="modal-signal" id="modalSignal">—</div>
+
+    <div class="modal-section-title">RSI H4 — ULTIME 14 CANDELE</div>
+    <div class="modal-candles" id="modalCandles"></div>
+
+    <button class="close-modal" onclick="document.getElementById('modalOverlay').classList.remove('open')">CHIUDI</button>
+  </div>
+</div>
+
+<script>
+const API_KEY = 'fbb276fd1a4b45c8a096c11fde777a9f';
+const INTERVAL = '4h';
+const RSI_PERIOD = 14;
+
+// Coppie default
+let pairs = JSON.parse(localStorage.getItem('rsi_pairs') || 'null') || [
+  'EUR/USD','GBP/USD','USD/JPY','USD/CHF','AUD/USD','USD/CAD','NZD/USD'
+];
+
+let rsiData = {}; // { pair: { rsi, history, error } }
+
+function savePairs() {
+  localStorage.setItem('rsi_pairs', JSON.stringify(pairs));
+}
+
+function formatPairForAPI(p) {
+  // Twelve Data vuole EUR/USD — assicura lo slash sia presente
+  if (!p.includes('/') && p.length === 6) {
+    return p.slice(0,3) + '/' + p.slice(3);
+  }
+  return p;
+}
+
+async function fetchRSI(pair) {
+  const symbol = formatPairForAPI(pair);
+  const url = `https://api.twelvedata.com/rsi?symbol=${symbol}&interval=${INTERVAL}&time_period=${RSI_PERIOD}&outputsize=20&apikey=${API_KEY}`;
+  try {
+    const resp = await fetch(url);
+    const data = await resp.json();
+    if (data.status === 'error' || !data.values) {
+      return { error: data.message || 'Errore API' };
+    }
+    const values = data.values.map(v => parseFloat(v.rsi)).reverse(); // cronologico
+    return {
+      rsi: values[values.length - 1],
+      history: values
+    };
+  } catch(e) {
+    return { error: 'Network error' };
+  }
+}
+
+function getSignal(rsi) {
+  if (rsi === null || rsi === undefined) return { label: '...', cls: 'loading-card' };
+  if (rsi >= 70) return { label: 'IPERCOMPRATO · SHORT', cls: 'overbought' };
+  if (rsi <= 30) return { label: 'IPERVENDUTO · LONG', cls: 'oversold' };
+  return { label: 'NEUTRO', cls: 'neutral' };
+}
+
+function renderGrid() {
+  const grid = document.getElementById('grid');
+  grid.innerHTML = '';
+  document.getElementById('pairCount').textContent = pairs.length + ' coppie';
+
+  pairs.forEach(pair => {
+    const d = rsiData[pair];
+    const rsi = d ? d.rsi : null;
+    const err = d ? d.error : null;
+    const sig = getSignal(err ? null : rsi);
+
+    const rsiDisplay = err ? 'ERR' : (rsi !== null && rsi !== undefined ? rsi.toFixed(1) : '···');
+    const barPct = (rsi !== null && rsi !== undefined && !err) ? (rsi / 100 * 100) + '%' : '0%';
+
+    const fillColor = sig.cls === 'overbought' ? 'var(--ob)' :
+                      sig.cls === 'oversold' ? 'var(--os)' : 'var(--accent)';
+
+    const card = document.createElement('div');
+    card.className = `card ${err ? 'loading-card' : sig.cls}`;
+    card.innerHTML = `
+      <div class="card-pair">${pair}</div>
+      <div class="card-rsi ${err ? 'skeleton' : ''}">${rsiDisplay}</div>
+      <div class="card-label">${err ? (err.substring(0,20)) : sig.label}</div>
+      <div class="rsi-bar-container">
+        <div class="rsi-markers">
+          <div class="rsi-fill" style="width:${barPct};background:${fillColor}"></div>
+          <div class="rsi-line" style="left:30%"></div>
+          <div class="rsi-line" style="left:70%"></div>
+        </div>
+      </div>
+    `;
+    card.addEventListener('click', () => openModal(pair));
+    grid.appendChild(card);
+  });
+}
+
+function openModal(pair) {
+  const d = rsiData[pair];
+  if (!d || d.error) return;
+
+  const rsi = d.rsi;
+  const sig = getSignal(rsi);
+
+  const sigColors = { overbought: 'var(--ob)', oversold: 'var(--os)', neutral: 'var(--muted)' };
+
+  document.getElementById('modalPair').textContent = pair;
+  document.getElementById('modalRsi').textContent = rsi.toFixed(2);
+  document.getElementById('modalRsi').style.color = sigColors[sig.cls] || 'var(--text)';
+  document.getElementById('modalSignal').textContent = sig.label;
+  document.getElementById('modalSignal').style.color = sigColors[sig.cls] || 'var(--muted)';
+
+  // Mini chart storico RSI
+  const candles = document.getElementById('modalCandles');
+  candles.innerHTML = '';
+  const history = d.history || [rsi];
+  const maxRSI = Math.max(...history, 70);
+  const minRSI = Math.min(...history, 30);
+
+  history.forEach(v => {
+    const pct = ((v - minRSI) / (maxRSI - minRSI + 0.001)) * 100;
+    const color = v >= 70 ? 'var(--ob)' : v <= 30 ? 'var(--os)' : 'var(--accent)';
+    const wrap = document.createElement('div');
+    wrap.className = 'candle-wrap';
+    wrap.innerHTML = `
+      <div class="candle-bar" style="height:${Math.max(pct,3)}%;background:${color};opacity:${v === rsi ? 1 : 0.5}"></div>
+      <div class="candle-rsi-label">${v.toFixed(0)}</div>
+    `;
+    candles.appendChild(wrap);
+  });
+
+  document.getElementById('modalOverlay').classList.add('open');
+}
+
+function closeModal(e) {
+  if (e.target === document.getElementById('modalOverlay')) {
+    document.getElementById('modalOverlay').classList.remove('open');
+  }
+}
+
+async function refreshAll() {
+  const btn = document.getElementById('refreshBtn');
+  btn.classList.add('loading');
+  btn.querySelector('.spin').textContent = '↻';
+
+  // Fetch in parallelo con rate limit (max 8/min su free tier)
+  const chunkSize = 8;
+  for (let i = 0; i < pairs.length; i += chunkSize) {
+    const chunk = pairs.slice(i, i + chunkSize);
+    await Promise.all(chunk.map(async pair => {
+      const result = await fetchRSI(pair);
+      rsiData[pair] = result;
+    }));
+    renderGrid();
+    if (i + chunkSize < pairs.length) {
+      await new Promise(r => setTimeout(r, 12000)); // 12s tra chunk
+    }
+  }
+
+  const now = new Date();
+  document.getElementById('lastUpdate').textContent =
+    'Aggiornato ' + now.toLocaleTimeString('it-IT', {hour:'2-digit', minute:'2-digit'});
+
+  btn.classList.remove('loading');
+  btn.querySelector('.spin').textContent = '↻';
+}
+
+function addPair() {
+  const input = document.getElementById('pairInput');
+  const err = document.getElementById('errorMsg');
+  let val = input.value.trim().toUpperCase().replace(/[^A-Z]/g, '');
+
+  // Normalizza: inserisci / se 6 char
+  if (val.length === 6) val = val.slice(0,3) + '/' + val.slice(3);
+
+  err.style.display = 'none';
+
+  if (val.length < 7) {
+    err.textContent = 'Formato non valido. Es: EURUSD o EUR/USD';
+    err.style.display = 'block';
+    return;
+  }
+
+  if (pairs.includes(val)) {
+    err.textContent = 'Coppia già presente';
+    err.style.display = 'block';
+    return;
+  }
+
+  pairs.push(val);
+  savePairs();
+  input.value = '';
+  renderGrid();
+
+  // Fetch solo la nuova coppia
+  fetchRSI(val).then(result => {
+    rsiData[val] = result;
+    renderGrid();
+  });
+}
+
+// Swipe per rimuovere (long press)
+let pressTimer;
+function setupLongPress() {
+  // Delegato — gestito nel renderGrid tramite contextmenu
+  document.getElementById('grid').addEventListener('contextmenu', e => {
+    e.preventDefault();
+    const card = e.target.closest('.card');
+    if (!card) return;
+    const pair = card.querySelector('.card-pair').textContent;
+    if (confirm(`Rimuovere ${pair}?`)) {
+      pairs = pairs.filter(p => p !== pair);
+      delete rsiData[pair];
+      savePairs();
+      renderGrid();
+    }
+  });
+}
+
+// Init
+renderGrid();
+setupLongPress();
+refreshAll();
+
+// Auto-refresh ogni 15 minuti
+setInterval(refreshAll, 15 * 60 * 1000);
+</script>
+</body>
+  </html>
+  
